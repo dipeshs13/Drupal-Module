@@ -1,0 +1,10 @@
+name: <script>alert('Evil module name');</script>
+type: module
+description: <script>alert('Evil module desc');</script>
+package: Testing
+# version: VERSION
+
+# Information added by Drupal.org packaging script on 2024-08-02
+version: '11.0.0'
+project: 'drupal'
+datestamp: 1722578557
