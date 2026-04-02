@@ -1,0 +1,4 @@
+services:
+  wcag_helper.alt_text_rule:
+    class: Drupal\wcag_helper\Accessibility\Rule\AltTextRule
+    arguments: ['@logger.factory']

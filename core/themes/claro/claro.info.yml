@@ -16,7 +16,7 @@ base theme: false
 description: A clean, accessible, and powerful Drupal administration theme.
 alt text: Screenshot of Claro, Drupal administration theme.
 package: Core
-# version: VERSION
+version: VERSION
 libraries:
   - core/drupal.message
   - core/normalize
@@ -37,12 +37,7 @@ libraries-override:
       component:
         misc/components/autocomplete-loading.module.css: css/components/autocomplete-loading.module.css
 
-  system/base:
-    css:
-      component:
-        css/components/system-status-counter.css: css/components/system-status-counter.css
-        css/components/system-status-report-counters.css: css/components/system-status-report-counters.css
-        css/components/system-status-report-general-info.css: css/components/system-status-report-general-info.css
+  system/status.report: claro/status.report
 
   system/admin:
     css:
@@ -118,6 +113,8 @@ libraries-extend:
     - claro/dropbutton
   core/drupal.checkbox:
     - claro/checkbox
+  core/drupal.item-list:
+    - claro/item-list
   core/drupal.message:
     - claro/messages
   core/drupal.progress:
@@ -128,6 +125,8 @@ libraries-extend:
     - claro/claro.tabledrag
   core/drupal.tableselect:
     - claro/tableselect
+  core/drupal.tablesort:
+    - claro/drupal.tablesort
   core/drupal.vertical-tabs:
     - claro/vertical-tabs
   file/drupal.file:
@@ -148,6 +147,8 @@ libraries-extend:
     - claro/form.password-confirm
   node/drupal.node.preview:
     - claro/drupal.node.preview
+  system/status.report:
+    - claro/status.report
   views/views.module:
     - claro/views
   views_ui/admin.styling:
@@ -175,8 +176,3 @@ regions:
   sidebar_first: First sidebar
 regions_hidden:
   - sidebar_first
-
-# Information added by Drupal.org packaging script on 2024-08-02
-version: '11.0.0'
-project: 'drupal'
-datestamp: 1722578557

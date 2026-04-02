@@ -9,14 +9,15 @@ use Drupal\Core\Language\LanguageInterface;
 use Drupal\KernelTests\KernelTestBase;
 use Drupal\search\SearchIndexInterface;
 use Drupal\search\SearchQuery;
+use PHPUnit\Framework\Attributes\Group;
+use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 
 // cspell:ignore cillum dolore enim veniam
-
 /**
  * Indexes content and queries it.
- *
- * @group search
  */
+#[Group('search')]
+#[RunTestsInSeparateProcesses]
 class SearchMatchTest extends KernelTestBase {
 
   // The search index can contain different types of content. Typically the type
@@ -26,9 +27,7 @@ class SearchMatchTest extends KernelTestBase {
   const SEARCH_TYPE_JPN = '_test3_';
 
   /**
-   * Modules to enable.
-   *
-   * @var array
+   * {@inheritdoc}
    */
   protected static $modules = ['search'];
 
@@ -52,7 +51,7 @@ class SearchMatchTest extends KernelTestBase {
   /**
    * Set up a small index of items to test against.
    */
-  public function _setup() {
+  public function _setup(): void {
     $this->config('search.settings')->set('index.minimum_word_size', 3)->save();
 
     $search_index = \Drupal::service('search.index');
@@ -74,7 +73,7 @@ class SearchMatchTest extends KernelTestBase {
   }
 
   /**
-   * _test_: Helper method for generating snippets of content.
+   * Helper to generate lorem ipsum snippets of content.
    *
    * Generated items to test against:
    *   1  ipsum
@@ -83,7 +82,7 @@ class SearchMatchTest extends KernelTestBase {
    *   4  am ut enim am
    *   5  ut enim am minim veniam
    *   6  enim am minim veniam es cillum
-   *   7  am minim veniam es cillum dolore eu
+   *   7  am minim veniam es cillum dolore eu.
    */
   public function getText($n) {
     $words = explode(' ', "Ipsum dolore sit am. Ut enim am minim veniam. Es cillum dolore eu.");
@@ -91,14 +90,14 @@ class SearchMatchTest extends KernelTestBase {
   }
 
   /**
-   * _test2_: Helper method for generating snippets of content.
+   * Helper to generate English language snippets of content.
    *
    * Generated items to test against:
    *   8  dear
    *   9  king philip
    *   10 philip came over
    *   11 came over from germany
-   *   12 over from germany swimming
+   *   12 over from germany swimming.
    */
   public function getText2($n) {
     $words = explode(' ', "Dear King Philip came over from Germany swimming.");
@@ -108,7 +107,7 @@ class SearchMatchTest extends KernelTestBase {
   /**
    * Run predefine queries looking for indexed terms.
    */
-  public function _testQueries() {
+  public function _testQueries(): void {
     // Note: OR queries that include short words in OR groups are only accepted
     // if the ORed terms are ANDed with at least one long word in the rest of
     // the query. Examples:
@@ -227,7 +226,7 @@ class SearchMatchTest extends KernelTestBase {
    *
    * Verify if a query produces the correct results.
    */
-  public function _testQueryMatching($query, $set, $results) {
+  public function _testQueryMatching($query, $set, $results): void {
     // Get result IDs.
     $found = [];
     foreach ($set as $item) {
@@ -245,7 +244,7 @@ class SearchMatchTest extends KernelTestBase {
    *
    * Verify if a query produces normalized, monotonous scores.
    */
-  public function _testQueryScores($query, $set, $results) {
+  public function _testQueryScores($query, $set, $results): void {
     // Get result scores.
     $scores = [];
     foreach ($set as $item) {

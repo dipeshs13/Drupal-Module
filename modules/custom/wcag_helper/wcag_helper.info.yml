@@ -1,0 +1,6 @@
+name: 'WCAG Helper'
+type: module
+description: 'AI Accessibility Assistant for WCAG 2.1 compliance'
+core_version_requirement: ^10 || ^11
+package: Custom
+dependencies: []

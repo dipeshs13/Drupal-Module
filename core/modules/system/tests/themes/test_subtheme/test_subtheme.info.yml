@@ -1,8 +1,8 @@
 name: 'Theme test subtheme'
 type: theme
-description: 'Test theme which uses test_basetheme as the base theme.'
-# version: VERSION
-base theme: test_basetheme
+description: 'Test theme which uses test_base_theme as the base theme.'
+version: VERSION
+base theme: test_base_theme
 libraries:
   - test_subtheme/global-styling
 libraries-override:
@@ -10,15 +10,10 @@ libraries-override:
     css:
       base:
         css/sub-remove.css: false
-  test_basetheme/global-styling:
+  test_base_theme/global-styling:
     css:
       base:
         base-add.sub-remove.css: false
 libraries-extend:
   starterkit_theme/base:
     - test_subtheme/global-styling
-
-# Information added by Drupal.org packaging script on 2024-08-02
-version: '11.0.0'
-project: 'drupal'
-datestamp: 1722578557

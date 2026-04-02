@@ -311,6 +311,14 @@
 
       function checkEnabled() {
         updateSelectionCount(settings.media_library.selection_remaining);
+        // Clear any error messages when the selection is within the allowed
+        // limit. A negative remaining value means unlimited selection.
+        if (
+          settings.media_library.selection_remaining < 0 ||
+          currentSelection.length <= settings.media_library.selection_remaining
+        ) {
+          $('#media-library-messages').empty();
+        }
         if (
           currentSelection.length === settings.media_library.selection_remaining
         ) {
@@ -410,7 +418,9 @@
         return;
       }
       window.addEventListener('dialog:afterclose', () => {
-        Drupal.MediaLibrary.currentSelection = [];
+        // This empty the array while keeping the existing array reference,
+        // to keep event listeners working.
+        Drupal.MediaLibrary.currentSelection.length = 0;
       });
     },
   };

@@ -1,7 +1,7 @@
 name: 'Demo: Umami Food Magazine (Experimental)'
 type: profile
 description: 'Install an example site that shows off some of Drupal’s capabilities.'
-# version: VERSION
+version: VERSION
 install:
   - node
   - history
@@ -11,7 +11,6 @@ install:
   - ckeditor5
   - config
   - contextual
-  - contact
   - layout_builder
   - layout_discovery
   - menu_link_content
@@ -49,8 +48,3 @@ themes:
   - claro
   - umami
 keep_english: true
-
-# Information added by Drupal.org packaging script on 2024-08-02
-version: '11.0.0'
-project: 'drupal'
-datestamp: 1722578557

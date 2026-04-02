@@ -1,0 +1,78 @@
+<?php
+
+use Drupal\Core\Form\FormStateInterface;
+
+/**
+ * Implements hook_form_alter().
+ * Adds custom validation to ALL node forms.
+ */
+function wcag_helper_form_alter(&$form, FormStateInterface $form_state, $form_id) {
+
+  // Only target node forms
+  if (strpos($form_id, 'node_') !== 0) {
+    return;
+  }
+
+  // Attach validator
+  $form['#validate'][] = 'wcag_helper_node_form_validate';
+}
+
+/**
+ * Custom validation for node forms.
+ */
+function wcag_helper_node_form_validate(&$form, FormStateInterface $form_state) {
+
+  // Load service
+  $rule = \Drupal::service('wcag_helper.alt_text_rule');
+
+  if (!$rule) {
+    \Drupal::logger('wcag_helper')->error('Alt text rule service not found.');
+    return;
+  }
+
+  // Get submitted values (SAFE WAY)
+  $values = $form_state->getValues();
+
+  $issues_found = [];
+
+  // Loop through all submitted fields
+  foreach ($values as $field_name => $value) {
+
+    // Skip non-field values
+    if (!is_array($value)) {
+      continue;
+    }
+
+    // Try to detect image fields by structure
+    foreach ($value as $item) {
+
+      if (is_array($item) && isset($item['alt'])) {
+
+        // Run rule
+        $issues = $rule->check([
+          'images' => [$item]
+        ]);
+
+        if (!empty($issues)) {
+          $issues_found[] = $field_name;
+
+          // Stop at first error per field
+          $form_state->setErrorByName(
+            $field_name,
+            t('Image alt text is required for accessibility (WCAG 1.1.1). Please add alt text.')
+          );
+
+          break;
+        }
+      }
+    }
+  }
+
+  // Log result (optional)
+  if (!empty($issues_found)) {
+    \Drupal::logger('wcag_helper')->warning(
+      'WCAG validation failed in fields: @fields',
+      ['@fields' => implode(', ', $issues_found)]
+    );
+  }
+}
