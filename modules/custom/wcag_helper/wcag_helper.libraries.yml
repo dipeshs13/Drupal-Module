@@ -1,0 +1,10 @@
+ckeditor_watcher:
+  js:
+    js/wcag_helper_ckeditor.js: {}
+  dependencies:
+    - core/drupal
+    - core/jquery
+    - core/once
+    - core/ckeditor5
+
+    
