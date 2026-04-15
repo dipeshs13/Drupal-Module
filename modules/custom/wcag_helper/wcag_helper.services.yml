@@ -2,3 +2,6 @@ services:
   wcag_helper.alt_text_rule:
     class: Drupal\wcag_helper\Accessibility\Rule\AltTextRule
     arguments: ['@logger.factory']
+  wcag_helper.link_rule:
+    class: Drupal\wcag_helper\Accessibility\Rule\UnclearLinkTextRule
+    arguments: ['@logger.factory']
