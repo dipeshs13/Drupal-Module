@@ -1,19 +1,27 @@
 <?php
 
+/**
+ * @file
+ * Primary module hooks for WCAG Helper module.
+ */
+
 use Drupal\Core\Form\FormStateInterface;
+
+/**
+ * Placeholder to prevent the 'Class does not exist' error.
+ */
+function wcag_helper_page_attachments(array &$attachments) {
+  // Empty.
+}
 
 /**
  * Implements hook_form_alter().
  */
 function wcag_helper_form_alter(&$form, FormStateInterface $form_state, $form_id) {
-  // Target node add and edit forms safely.
   if (strpos($form_id, 'node_') === 0 && strpos($form_id, '_form') !== FALSE) {
-    
-    // 1. SKIP Delete forms AND Revision forms which often cause crashes.
     if (strpos($form_id, '_delete_') !== FALSE || strpos($form_id, '_revision_') !== FALSE) {
       return;
     }
-
     $form['#attached']['library'][] = 'wcag_helper/ckeditor_watcher';
     $form['#validate'][] = 'wcag_helper_node_form_validate';
   }
@@ -23,81 +31,94 @@ function wcag_helper_form_alter(&$form, FormStateInterface $form_state, $form_id
  * Custom validation for node forms.
  */
 function wcag_helper_node_form_validate(&$form, FormStateInterface $form_state) {
-  // Use getValue() instead of getValues() for better performance and memory management.
-  $issues_found = [];
+  try {
+    $issues_found = [];
+    $body = $form_state->getValue('body');
 
-  // --- PART A: Standard Image Fields ---
-  // We only scan known image fields to avoid looping through every form value.
-  $all_values = $form_state->getValues();
-  foreach ($all_values as $key => $value) {
-    if (is_array($value) && isset($value[0]['target_id'])) {
-      foreach ($value as $delta => $item) {
-        if (isset($item['alt']) && trim($item['alt']) === '' && !empty($item['target_id'])) {
-          $form_state->setErrorByName($key . '][' . $delta . '][alt', t('Alt text is required for images.'));
-          $issues_found[] = $key;
-        }
-      }
+    if (!is_array($body) || empty($body[0]['value'])) {
+      return;
     }
-  }
 
-  // --- PART B: CKEditor Body Check ---
-  $body = $form_state->getValue('body');
-  $body_html = $body[0]['value'] ?? '';
+    $body_html = $body[0]['value'];
+    if (strlen($body_html) < 10) return;
 
-  if (!empty($body_html) && strlen($body_html) > 10) {
-    // Optimization: Don't use HTML-ENTITIES unless there are special characters.
-    // This saves a lot of memory.
-    $dom = new \DOMDocument();
+    if (!class_exists('DOMDocument')) return;
+
     libxml_use_internal_errors(TRUE);
-
-    // Use a more memory-efficient way to handle UTF-8.
-    $html_string = '<?xml encoding="UTF-8">' . $body_html;
-    @$dom->loadHTML($html_string, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
-    
+    $dom = new \DOMDocument('1.0', 'UTF-8');
+    $html_to_load = '<?xml encoding="UTF-8">' . $body_html;
+    @$dom->loadHTML($html_to_load, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
     libxml_clear_errors();
 
-    if ($dom) {
-      $xpath = new \DOMXPath($dom);
+    $xpath = new \DOMXPath($dom);
 
-      // 1. IMAGE ALT CHECK
-      $images = $dom->getElementsByTagName('img');
-      foreach ($images as $img) {
-        if (!$img->hasAttribute('alt') || trim($img->getAttribute('alt')) === '') {
-          $form_state->setErrorByName('body][0][value', t('Body: Image missing alt text.'));
-          $issues_found[] = 'body_alt';
-          break; 
-        }
+    // -------------------------
+    // 1. IMPROVED HEADING STRUCTURE
+    // -------------------------
+    $headings = $xpath->query('//h1 | //h2 | //h3 | //h4 | //h5 | //h6');
+    if ($headings && $headings->length > 0) {
+      // FIX: Ensure the first heading is not skipping levels (should be H2)
+      $first_heading_level = (int) substr($headings->item(0)->nodeName, 1);
+      if ($first_heading_level > 2) {
+        $form_state->setErrorByName('body][0][value', t('First heading should be an H2. You started with H@c.', ['@c' => $first_heading_level]));
+        $issues_found[] = 'heading_start';
       }
 
-      // 2. HEADING STRUCTURE
-      $headings = $xpath->query('//h1 | //h2 | //h3 | //h4 | //h5 | //h6');
-      if ($headings->length > 0) {
-        $prev = 0;
-        foreach ($headings as $h) {
-          $curr = (int) substr($h->nodeName, 1);
-          if ($prev !== 0 && $curr > ($prev + 1)) {
-            $form_state->setErrorByName('body][0][value', t('Heading level skipped (H@p to H@c).', ['@p' => $prev, '@c' => $curr]));
-            $issues_found[] = 'headings';
-            break;
-          }
-          $prev = $curr;
-        }
-      }
-
-      // 3. PARAGRAPH COMPLEXITY
-      $paragraphs = $dom->getElementsByTagName('p');
-      foreach ($paragraphs as $p) {
-        $word_count = count(preg_split('/\s+/', trim($p->textContent), -1, PREG_SPLIT_NO_EMPTY));
-        if ($word_count > 80) {
-          $form_state->setErrorByName('body][0][value', t('Paragraph too long (@count words).', ['@count' => $word_count]));
-          $issues_found[] = 'readability';
+      $prev = 0;
+      foreach ($headings as $h) {
+        $curr = (int) substr($h->nodeName, 1);
+        if ($prev !== 0 && $curr > ($prev + 1)) {
+          $form_state->setErrorByName('body][0][value', t('Heading level skipped: H@p to H@c.', ['@p' => $prev, '@c' => $curr]));
+          $issues_found[] = 'headings_sequence';
           break;
         }
+        $prev = $curr;
       }
     }
-  }
 
-  if (!empty($issues_found)) {
-    \Drupal::logger('wcag_helper')->notice('Validation issues on: @list', ['@list' => implode(', ', $issues_found)]);
+    // -------------------------
+    // 2. NEW: VAGUE LINK CHECK (PHP version)
+    // -------------------------
+    $vague_words = ['click here', 'read more', 'learn more', 'here', 'view more', 'link'];
+    $links = $dom->getElementsByTagName('a');
+    foreach ($links as $link) {
+      $link_text = strtolower(trim($link->textContent));
+      if (in_array($link_text, $vague_words)) {
+        $form_state->setErrorByName('body][0][value', t('Body: Vague link text found ("@text"). Please use descriptive links.', ['@text' => $link_text]));
+        $issues_found[] = 'vague_links';
+        break;
+      }
+    }
+
+    // -------------------------
+    // 3. IMAGE ALT CHECK
+    // -------------------------
+    foreach ($dom->getElementsByTagName('img') as $img) {
+      if (!$img->hasAttribute('alt') || trim($img->getAttribute('alt')) === '') {
+        $form_state->setErrorByName('body][0][value', t('Body: An image is missing alt text.'));
+        $issues_found[] = 'body_alt';
+        break;
+      }
+    }
+
+    // -------------------------
+    // 4. PARAGRAPH COMPLEXITY
+    // -------------------------
+    foreach ($dom->getElementsByTagName('p') as $p) {
+      $text = trim($p->textContent);
+      $word_count = count(preg_split('/\s+/', $text, -1, PREG_SPLIT_NO_EMPTY));
+      if ($word_count > 80) {
+        $form_state->setErrorByName('body][0][value', t('Paragraph too long (@count words).', ['@count' => $word_count]));
+        $issues_found[] = 'readability';
+        break;
+      }
+    }
+
+    if (!empty($issues_found)) {
+      \Drupal::logger('wcag_helper')->notice('WCAG issues: @list', ['@list' => implode(', ', $issues_found)]);
+    }
+
+  } catch (\Throwable $e) {
+    \Drupal::logger('wcag_helper')->error('WCAG Error: @msg', ['@msg' => $e->getMessage()]);
   }
 }
