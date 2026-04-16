@@ -14,6 +14,7 @@ function wcag_helper_page_attachments(array &$attachments) {
   // Empty.
 }
 
+
 /**
  * Implements hook_form_alter().
  */
@@ -121,4 +122,39 @@ function wcag_helper_node_form_validate(&$form, FormStateInterface $form_state) 
   } catch (\Throwable $e) {
     \Drupal::logger('wcag_helper')->error('WCAG Error: @msg', ['@msg' => $e->getMessage()]);
   }
+}
+
+/**
+ * Implements hook_page_bottom().
+ * This ensures the sidebar HTML is present on every single page.
+ */
+function wcag_helper_page_bottom(array &$page_bottom) {
+  // Attach the library (CSS/JS) to every page.
+  $page_bottom['wcag_helper_assets'] = [
+    '#attached' => [
+      'library' => [
+        'wcag_helper/ckeditor_watcher',
+      ],
+    ],
+  ];
+
+  // Inject the Sidebar HTML structure.
+  $page_bottom['wcag_helper_sidebar'] = [
+    '#type' => 'inline_template',
+    '#template' => '
+      <div id="wcag-accessibility-sidebar" class="wcag-sidebar-minimized">
+        <div class="wcag-sidebar-header" id="wcag-sidebar-header" style="cursor: pointer;">
+          <div class="wcag-status-indicator"></div>
+          <h3>WCAG Live Check</h3>
+          <button id="wcag-sidebar-toggle" aria-label="Toggle Sidebar">◀</button>
+        </div>
+        <div id="wcag-sidebar-content">
+          <div class="wcag-sidebar-section">
+            <div id="wcag-issue-list">
+              <p class="wcag-no-issues">Waiting for content analysis... (Only active on edit forms)</p>
+            </div>
+          </div>
+        </div>
+      </div>',
+  ];
 }

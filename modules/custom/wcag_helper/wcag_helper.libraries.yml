@@ -1,4 +1,7 @@
 ckeditor_watcher:
+  css:
+    theme:
+      css/wcag_helper_sidebar.css: {}
   js:
     js/wcag_helper_ckeditor.js: {}
   dependencies:
