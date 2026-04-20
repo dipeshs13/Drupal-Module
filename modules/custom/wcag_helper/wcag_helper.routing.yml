@@ -1,0 +1,10 @@
+wcag.gemini_fix:
+  path: '/wcag/gemini-fix'
+  defaults:
+    _controller: '\Drupal\wcag_helper\Controller\GeminiProxyController::generate'
+  methods: [POST]
+  requirements:
+    _permission: 'administer content'
+  options:
+    no_cache: true
+

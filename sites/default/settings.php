@@ -884,3 +884,4 @@ $databases['default']['default'] = array (
   'autoload' => 'core/modules/mysql/src/Driver/Database/mysql/',
 );
 $settings['config_sync_directory'] = 'sites/default/files/config_13AAkwKhOKFYCu1sdxkUiAp-3ElG-v8IKlKqP_yFz6IABWnUjCM_pmny7weklQ3ZetW3hrbvFQ/sync';
+$settings['gemini_api_key'] = 'AIzaSyBJdpn57iuiaQSGCjWfL5INOyAfj5qEk48';

@@ -158,3 +158,31 @@ function wcag_helper_page_bottom(array &$page_bottom) {
       </div>',
   ];
 }
+
+/**
+ * Implements hook_preprocess_html().
+ */
+function wcag_helper_preprocess_html(&$variables) {
+  $node = \Drupal::routeMatch()->getParameter('node');
+
+  // Handle the "Edit Form" case where 'node' might be an object or ID
+  if (!$node) {
+    $node = \Drupal::routeMatch()->getParameter('node_preview');
+  }
+
+  // Final check to get the ID
+  $nid = NULL;
+  if ($node instanceof \Drupal\node\NodeInterface) {
+    $nid = $node->id();
+  } elseif (is_numeric($node)) {
+    $nid = $node;
+  }
+
+  if ($nid) {
+    // 1. Adds data-entity-id to the <body> tag
+    $variables['attributes']['data-entity-id'] = $nid;
+    
+    // 2. Injects it directly into JavaScript drupalSettings
+    $variables['#attached']['drupalSettings']['wcag_helper']['current_nid'] = $nid;
+  }
+}
