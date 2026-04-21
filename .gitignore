@@ -1,0 +1,9 @@
+# Ignore the settings files where your API keys live
+/sites/default/settings.php
+/sites/default/settings.local.php
+
+# Ignore your uploaded files
+/sites/default/files/
+
+# Ignore the vendor folder if it exists in your root
+/vendor/

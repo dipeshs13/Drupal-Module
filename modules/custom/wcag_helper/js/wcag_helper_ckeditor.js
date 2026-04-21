@@ -4,8 +4,8 @@
     // ============================================================
     // PERSISTENCE CONSTANTS
     // ============================================================
-    const STORAGE_KEY          = 'wcag_contrast_fixes';
-    const GEMINI_ENDPOINT      = '/wcag/gemini-fix';   // your GeminiProxyController route
+    const STORAGE_KEY = 'wcag_contrast_fixes';
+    const GEMINI_ENDPOINT = '/wcag/gemini-fix';   // your GeminiProxyController route
 
     // ============================================================
     // PERSISTENCE HELPERS
@@ -61,7 +61,7 @@
                     if (!$(el).attr('data-orig-color')) $(el).attr('data-orig-color', data.original);
                     $(el).css({ 'color': data.fixed, 'text-decoration': '' });
                 }
-            } catch (e) {}
+            } catch (e) { }
         });
     };
 
@@ -75,9 +75,9 @@
      */
     const callGemini = async function (prompt) {
         const response = await fetch(GEMINI_ENDPOINT, {
-            method:  'POST',
+            method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ prompt })
+            body: JSON.stringify({ prompt })
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
@@ -93,46 +93,164 @@
      * @param {string}      issueType  Human-readable issue label e.g. "vague link text"
      * @param {jQuery}      $resultBox jQuery element to write the AI response into
      */
+
+    /**
+     * The Brain: Suggests text for the specific CKEditor Balloon input
+     */
+    /**
+ * Brain: Takes the user's input (e.g., "mountain") and expands it.
+ */
+    /**
+ * Brain: Fetches a suggestion but does NOT fill the box yet.
+ * Instead, it creates a dropdown UI.
+ */
+   /**
+     * Creates a Dropdown UI with multiple AI suggestions based on user input.
+     */
+    const showAltDropdown = async function ($altInput, imgUrl) {
+        const userHint = $altInput.val().trim();
+        if (!imgUrl || userHint.length < 2) return;
+
+        $('.wcag-ai-dropdown').remove();
+
+        const $dropdown = $('<div class="wcag-ai-dropdown"></div>').css({
+            position: 'absolute',
+            background: '#1e2227',
+            color: '#abb2bf',
+            border: '1px solid #444',
+            borderRadius: '6px',
+            padding: '10px',
+            fontSize: '11px',
+            zIndex: 9999999, // Extremely high z-index
+            width: $altInput.outerWidth() + 'px',
+            top: ($altInput.offset().top + $altInput.outerHeight() + 8) + 'px',
+            left: $altInput.offset().left + 'px',
+            boxShadow: '0 8px 16px rgba(0,0,0,0.5)',
+        });
+
+        $dropdown.html('<div style="color:#7c3aed; font-size:10px; margin-bottom:5px; animation: pulse 1.5s infinite;">✨ GEMINI IS ANALYZING...</div>');
+        $('body').append($dropdown);
+
+        try {
+            const prompt = `The user typed: "${userHint}". Provide 3 short WCAG alt tags for this image: ${imgUrl}. Separate options with |`;
+            const result = await callGemini(prompt);
+            const options = result.split('|').map(s => s.trim()).filter(s => s.length > 0);
+
+            $dropdown.empty().append('<div style="color:#7c3aed; font-weight:bold; font-size:10px; margin-bottom:8px; border-bottom:1px solid #333; padding-bottom:4px;">SELECT TO APPLY:</div>');
+
+            options.forEach(opt => {
+                const $optDiv = $(`<div style="padding:8px; cursor:pointer; border-radius:4px; margin-bottom:2px; border:1px solid transparent;">${opt}</div>`);
+                
+                $optDiv.hover(
+                    function() { $(this).css({ 'background': '#2c313a', 'border-color': '#7c3aed' }); },
+                    function() { $(this).css({ 'background': 'transparent', 'border-color': 'transparent' }); }
+                );
+
+                // CRITICAL FIX: Use mousedown and preventDefault to stop the dropdown 
+                // from stealing focus and closing the CKEditor balloon.
+                $optDiv.on('mousedown', function(e) {
+                    e.preventDefault(); 
+                    e.stopPropagation();
+
+                    // 1. Update the actual input value
+                    $altInput.val(opt);
+
+                    // 2. Force CKEditor to recognize the change
+                    $altInput[0].dispatchEvent(new Event('input', { bubbles: true }));
+                    $altInput[0].dispatchEvent(new Event('change', { bubbles: true }));
+
+                    // 3. Clean up
+                    $('.wcag-ai-dropdown').remove();
+                    
+                    // 4. Refocus the input so the user sees the cursor
+                    $altInput.focus();
+                });
+
+                $dropdown.append($optDiv);
+            });
+
+        } catch (err) {
+            $dropdown.html('<div style="color:#f87171;">AI busy. Try again.</div>');
+            setTimeout(() => $dropdown.remove(), 2000);
+        }
+    };
     const applySmartFix = async function (element, issueType, $resultBox) {
-        const $el          = $(element);
+        const $el = $(element);
         const originalText = $el.text().trim();
 
-        // --- Show loading state ---
+        // --- 1. PRE-ANALYSIS ---
+        const wordCount = originalText.split(/\s+/).filter(w => w.length > 0).length;
+        const isTooLong = wordCount > 80;
+        const isContrastIssue = issueType.toLowerCase().includes('contrast') || issueType.toLowerCase().includes('color');
+
+        // --- 2. DYNAMIC INSTRUCTION BUILDING ---
+        let instructions = "";
+        if (isTooLong && isContrastIssue) {
+            instructions = "This paragraph is too long (over 80 words) AND has poor contrast. Shorten the text to be concise AND suggest a high-contrast hex color code (e.g., #000000 or #FFFFFF) that works for a screen reader.";
+        } else if (isTooLong) {
+            instructions = "This paragraph is too long. Please rewrite it to be under 50 words while keeping the core meaning.";
+        } else if (isContrastIssue) {
+            instructions = "The text color contrast is insufficient. Provide the same text but suggest a WCAG-compliant accessible hex color code.";
+        } else {
+            instructions = `Fix this issue: "${issueType}".`;
+        }
+
+        // --- 3. SHOW LOADING ---
         $resultBox.html(
             '<div style="color:#a78bfa; font-style:italic; font-size:11px; margin-top:6px; display:flex; align-items:center; gap:6px;">' +
             '<span class="wcag-ai-spinner" style="display:inline-block; width:10px; height:10px; border:2px solid #a78bfa; border-top-color:transparent; border-radius:50%; animation:wcagSpin 0.8s linear infinite;"></span>' +
-            'Gemini is thinking...</div>'
+            'Gemini is analyzing content & styles...</div>'
         ).show();
 
-        const contextText = $el.parent().text().substring(0, 400);
-        const prompt =
-            `You are a WCAG 2.1 accessibility expert. ` +
-            `Fix this specific issue: "${issueType}". ` +
-            `Surrounding context: "${contextText}". ` +
-            `The element's current text is: "${originalText}". ` +
-            `Provide ONLY the improved replacement text. ` +
-            `Be concise. No explanation, no quotes, no markdown.`;
+        // Use a structured prompt so we can parse the response easily
+        const prompt = `
+        You are a WCAG 2.1 accessibility expert.
+        Original Text: "${originalText}"
+        Issue: ${instructions}
+        
+        Return the result EXACTLY in this format:
+        FIXED_TEXT: [your text here]
+        FIXED_COLOR: [hex code or NONE]
+    `;
 
         try {
             const suggestion = await callGemini(prompt);
-            const clean      = suggestion.replace(/^["']|["']$/g, '').trim();
+
+            // --- 4. PARSE MULTI-PART RESPONSE ---
+            const textMatch = suggestion.match(/FIXED_TEXT:\s*([\s\S]*?)(?=FIXED_COLOR:|$)/i);
+            const colorMatch = suggestion.match(/FIXED_COLOR:\s*(#\w+|NONE)/i);
+
+            const cleanText = textMatch ? textMatch[1].trim() : originalText;
+            const cleanColor = (colorMatch && colorMatch[1].toUpperCase() !== 'NONE') ? colorMatch[1].trim() : null;
 
             $resultBox.html(
                 `<div style="margin-top:8px; padding:8px 10px; background:rgba(124,58,237,0.12); border:1px solid rgba(124,58,237,0.4); border-radius:6px; font-size:11px; color:#c4b5fd; line-height:1.5;">` +
-                `<div style="font-size:10px; color:#7c3aed; font-weight:bold; margin-bottom:4px; letter-spacing:0.5px;">GEMINI SUGGESTION</div>` +
-                `<div style="color:#e2d9f3;">${clean}</div>` +
-                `<button class="wcag-ai-apply-text" style="margin-top:6px; background:#7c3aed; color:white; border:none; padding:3px 10px; border-radius:4px; font-size:10px; cursor:pointer; font-weight:bold;">APPLY TO PAGE</button>` +
-                `<button class="wcag-ai-dismiss" style="margin-top:6px; margin-left:6px; background:transparent; color:#666; border:1px solid #444; padding:3px 10px; border-radius:4px; font-size:10px; cursor:pointer;">DISMISS</button>` +
+                `<div style="font-size:10px; color:#7c3aed; font-weight:bold; margin-bottom:4px; letter-spacing:0.5px;">GEMINI SMART FIX</div>` +
+                `<div style="color:#e2d9f3; margin-bottom: 5px;">${cleanText}</div>` +
+                (cleanColor ? `<div style="font-size:10px; color:#10b981;">Suggested Color: <span style="background:${cleanColor}; padding:0 4px; border-radius:2px;">${cleanColor}</span></div>` : '') +
+                `<button class="wcag-ai-apply-text" style="margin-top:8px; background:#7c3aed; color:white; border:none; padding:3px 10px; border-radius:4px; font-size:10px; cursor:pointer; font-weight:bold;">APPLY FIXES</button>` +
+                `<button class="wcag-ai-dismiss" style="margin-top:8px; margin-left:6px; background:transparent; color:#666; border:1px solid #444; padding:3px 10px; border-radius:4px; font-size:10px; cursor:pointer;">DISMISS</button>` +
                 `</div>`
             );
 
-            // Wire apply button
+            // --- 5. WIRE APPLY BUTTON ---
             $resultBox.find('.wcag-ai-apply-text').on('click', function () {
-                $el.text(clean);
+                // Apply text
+                $el.text(cleanText);
+
+                // Apply color if suggested
+                if (cleanColor) {
+                    $el.css('color', cleanColor);
+                    // Also update inline style to ensure persistence
+                    const currentStyle = $el.attr('style') || '';
+                    $el.attr('style', currentStyle + ` color: ${cleanColor} !important;`);
+                }
+
                 $el.css({ border: '2px solid #28a745', transition: 'border 0.3s' });
                 setTimeout(() => $el.css('border', ''), 2500);
+
                 $resultBox.html(
-                    '<div style="color:#28a745; font-size:11px; margin-top:6px; font-weight:bold;">Applied! Re-scan to update audit.</div>'
+                    '<div style="color:#28a745; font-size:11px; margin-top:6px; font-weight:bold;">✅ Changes applied!</div>'
                 );
             });
 
@@ -162,6 +280,7 @@
             $badge.text('AI OFFLINE').css({ background: 'rgba(239,68,68,0.15)', color: '#f87171', border: '1px solid rgba(239,68,68,0.4)' });
         }
     };
+
 
     // ============================================================
     // MAIN BEHAVIOR
@@ -193,33 +312,35 @@
                 // Hover listener
                 $(document).on('mousemove', function (e) {
                     const $tooltip = $('#wcag-hover-tooltip');
-                    const target   = e.target;
+                    const target = e.target;
                     if ($(target).closest('#wcag-accessibility-sidebar, #toolbar-administration, .toolbar, #wcag-hover-tooltip').length) {
                         $tooltip.hide(); return;
                     }
-                    const $el  = $(target);
+                    const $el = $(target);
                     const text = $el.text().trim();
                     if (text.length < 1 || $el.is(':empty')) { $tooltip.hide(); return; }
 
-                    const style    = window.getComputedStyle(target);
-                    const fg       = parseRGB(style.color);
-                    const bg       = parseRGB(getActualBackgroundColor(target));
-                    const ratio    = parseFloat(getContrastRatio(fg, bg));
-                    const isLarge  = isLargeText(target, style);
-                    const thresh   = isLarge ? 3 : 4.5;
+                    const style = window.getComputedStyle(target);
+                    const fg = parseRGB(style.color);
+                    const bg = parseRGB(getActualBackgroundColor(target));
+                    const ratio = parseFloat(getContrastRatio(fg, bg));
+                    const isLarge = isLargeText(target, style);
+                    const thresh = isLarge ? 3 : 4.5;
 
                     const contrastOk = ratio >= 4.5;
-                    const ratioOk    = ratio >= thresh;
+                    const ratioOk = ratio >= thresh;
 
                     let message, bgColor;
-                    if (contrastOk && ratioOk)        { message = 'Contrast and ratio are fine';           bgColor = '#28a745'; }
-                    else if (ratioOk && !contrastOk)  { message = 'Ratio matches but contrast is low';     bgColor = '#ff9800'; }
-                    else if (contrastOk && !ratioOk)  { message = 'Contrast matches but ratio is low';     bgColor = '#ff9800'; }
-                    else                               { message = 'Contrast and ratio do not match';       bgColor = '#e62117'; }
+                    if (contrastOk && ratioOk) { message = 'Contrast and ratio are fine'; bgColor = '#28a745'; }
+                    else if (ratioOk && !contrastOk) { message = 'Ratio matches but contrast is low'; bgColor = '#ff9800'; }
+                    else if (contrastOk && !ratioOk) { message = 'Contrast matches but ratio is low'; bgColor = '#ff9800'; }
+                    else { message = 'Contrast and ratio do not match'; bgColor = '#e62117'; }
 
                     $tooltip.html(`<span>${message}</span> --- ${ratio}:1 ratio`)
-                            .css({ background: bgColor, color: '#fff', display: 'block',
-                                   top: (e.clientY + 20) + 'px', left: (e.clientX + 15) + 'px' });
+                        .css({
+                            background: bgColor, color: '#fff', display: 'block',
+                            top: (e.clientY + 20) + 'px', left: (e.clientX + 15) + 'px'
+                        });
                 });
                 $(document).on('mouseleave', function () { $('#wcag-hover-tooltip').hide(); });
 
@@ -247,8 +368,8 @@
                 // --- 1b. ACTION BUTTONS ---
                 if (!$('#wcag-action-buttons').length) {
                     const $btnContainer = $('<div id="wcag-action-buttons" style="display:flex; flex-direction:column; gap:8px; margin-bottom:15px; border-bottom:1px solid #444; padding-bottom:15px;"></div>');
-                    const $scanBtn  = $('<button id="wcag-manual-scan"  style="background:#007bff; color:white; border:none; padding:10px; cursor:pointer; font-weight:bold; border-radius:4px;">SCAN PAGE CONTENT</button>');
-                    const $fixBtn   = $('<button id="wcag-fix-contrast" style="background:#28a745; color:white; border:none; padding:10px; cursor:pointer; font-weight:bold; border-radius:4px;">FIX ALL CONTRAST</button>');
+                    const $scanBtn = $('<button id="wcag-manual-scan"  style="background:#007bff; color:white; border:none; padding:10px; cursor:pointer; font-weight:bold; border-radius:4px;">SCAN PAGE CONTENT</button>');
+                    const $fixBtn = $('<button id="wcag-fix-contrast" style="background:#28a745; color:white; border:none; padding:10px; cursor:pointer; font-weight:bold; border-radius:4px;">FIX ALL CONTRAST</button>');
                     const $resetBtn = $('<button id="wcag-reset-all"    style="background:#6c757d; color:white; border:none; padding:10px; cursor:pointer; font-weight:bold; border-radius:4px;">RESET ALL</button>');
                     const $wcagLink = $('<a href="https://www.w3.org/WAI/WCAG21/Understanding/contrast-minimum.html" target="_blank" style="font-size:11px; color:#007bff; text-decoration:none; margin-top:5px;">Understand WCAG 1.4.3 Contrast</a>');
                     $btnContainer.append($scanBtn, $fixBtn, $resetBtn, $wcagLink);
@@ -258,7 +379,7 @@
                         $(this).text('SCANNING...').prop('disabled', true);
                         setTimeout(() => { runFullAudit(); $(this).text('SCAN PAGE CONTENT').prop('disabled', false); }, 150);
                     });
-                    $fixBtn.on('click',   () => applyContrastFix());
+                    $fixBtn.on('click', () => applyContrastFix());
                     $resetBtn.on('click', () => resetSiteStyles());
                 }
 
@@ -323,7 +444,7 @@
                         const question = $('#wcag-ai-question').val().trim();
                         if (!question) return;
 
-                        const $btn      = $(this);
+                        const $btn = $(this);
                         const $response = $('#wcag-ai-response');
 
                         $btn.text('THINKING...').prop('disabled', true);
@@ -359,7 +480,7 @@
 
                     // --- Wire: PAGE SUMMARY button ---
                     $('#wcag-ai-page-summary-btn').on('click', async function () {
-                        const $btn      = $(this);
+                        const $btn = $(this);
                         const $response = $('#wcag-ai-response');
 
                         $btn.text('SUMMARIZING...').prop('disabled', true);
@@ -369,10 +490,10 @@
                             'Generating accessibility summary...</div>'
                         ).show();
 
-                        const failCount  = $('#wcag-count-fail').text();
+                        const failCount = $('#wcag-count-fail').text();
                         const largeCount = $('#wcag-count-large').text();
-                        const passCount  = $('#wcag-count-pass').text();
-                        const pageText   = $('main, .region-content, #main-content')
+                        const passCount = $('#wcag-count-pass').text();
+                        const pageText = $('main, .region-content, #main-content')
                             .first().text().replace(/\s+/g, ' ').trim().substring(0, 800);
 
                         const summaryPrompt =
@@ -442,8 +563,50 @@
                 if (!$content.find('#wcag-issue-list').length) {
                     $content.append('<div id="wcag-issue-list" style="margin-top:20px;"></div>');
                 }
-            });
 
+
+                // --- NEW: CKEDITOR OBSERVER ---
+                // This watches for new images being uploaded or pasted into the editor
+                // Look for the editor, but we will watch document.body for the balloon popup
+                const bodyObserver = new MutationObserver((mutations) => {
+                    mutations.forEach((mutation) => {
+                        mutation.addedNodes.forEach((node) => {
+                            if (node.nodeType === 1) {
+                                const $altInput = $(node).find('.ck-input-text, .ck-labeled-field-view__input-wrapper input');
+                                
+                                if ($altInput.length > 0) {
+                                    const $activeImg = $('.ck-editor__editable img.ck-widget_selected, .ck-editor__editable .ck-widget_selected img');
+                                    const imgUrl = $activeImg.attr('src');
+
+                                    let typingTimer;
+                                    $altInput.on('input', function() {
+                                        clearTimeout(typingTimer);
+                                        typingTimer = setTimeout(() => {
+                                            showAltDropdown($(this), imgUrl);
+                                        }, 1000);
+                                    });
+                                }
+                            }
+                        });
+                    });
+                });
+
+                bodyObserver.observe(document.body, { childList: true, subtree: true });
+
+                // Close dropdown if clicked outside
+               $(document).on('mousedown.wcagGlobal', function(e) {
+                    if (!$(e.target).closest('.wcag-ai-dropdown, .ck-balloon-panel').length) {
+                        $('.wcag-ai-dropdown').remove();
+                    }
+                });
+            });
+            // --- 2. INITIAL SCAN FOR EXISTING IMAGES ---
+            // This handles images already on the page when it loads
+            $(once('wcag-img-init', '.ck-content img, .ck-editor__editable img', context)).each(function () {
+                if (!$(this).attr('alt')) {
+                    suggestAltText(this);
+                }
+            });
             // --- 2. SIDEBAR TOGGLE ---
             once('wcag-toggle', '#wcag-sidebar-header', context).forEach(function (header) {
                 $(header).on('click', function () {
@@ -460,7 +623,7 @@
 
             const getActualBackgroundColor = (el) => {
                 const style = window.getComputedStyle(el);
-                const bg    = style.backgroundColor;
+                const bg = style.backgroundColor;
                 if ((bg === 'rgba(0, 0, 0, 0)' || bg === 'transparent') && el.parentElement) {
                     return getActualBackgroundColor(el.parentElement);
                 }
@@ -492,9 +655,9 @@
             };
 
             const isLargeText = (el, style) => {
-                const fontSize   = parseFloat(style.fontSize);
+                const fontSize = parseFloat(style.fontSize);
                 const fontWeight = style.fontWeight;
-                const isBold     = fontWeight === 'bold' || parseInt(fontWeight) >= 700;
+                const isBold = fontWeight === 'bold' || parseInt(fontWeight) >= 700;
                 return fontSize >= 24 || (fontSize >= 18.66 && isBold) || ['H1', 'H2', 'H3'].includes(el.tagName);
             };
 
@@ -505,16 +668,16 @@
                 const fixesMap = loadFixesFromStorage();
 
                 $targets.find('p, h1, h2, h3, h4, h5, h6, a, span, li').each(function () {
-                    const style     = window.getComputedStyle(this);
-                    const fg        = parseRGB(style.color);
-                    const bgStr     = getActualBackgroundColor(this);
-                    const bg        = parseRGB(bgStr);
-                    const ratio     = getContrastRatio(fg, bg);
+                    const style = window.getComputedStyle(this);
+                    const fg = parseRGB(style.color);
+                    const bgStr = getActualBackgroundColor(this);
+                    const bg = parseRGB(bgStr);
+                    const ratio = getContrastRatio(fg, bg);
                     const threshold = isLargeText(this, style) ? 3 : 4.5;
 
                     if (ratio < threshold) {
                         if (!$(this).attr('data-orig-color')) $(this).attr('data-orig-color', style.color);
-                        const bgLum    = getLuminance(...bg);
+                        const bgLum = getLuminance(...bg);
                         const newColor = bgLum > 0.5 ? '#000000' : '#ffffff';
                         $(this).css({ 'color': newColor, 'text-decoration': '' });
                         const key = buildElementKey(this);
@@ -542,10 +705,10 @@
 
             // --- 5. THE CONTENT AUDIT ENGINE ---
             const runFullAudit = function () {
-                const $issueList       = $('#wcag-issue-list');
+                const $issueList = $('#wcag-issue-list');
                 const $statusIndicator = $('.wcag-status-indicator');
-                const vagueLinks       = ['click here', 'read more', 'learn more', 'here', 'view more', 'link'];
-                const $targets         = $('.ck-editor__editable, .ck-content, .region-content, .node__content, main article, #main-content').filter(':visible');
+                const vagueLinks = ['click here', 'read more', 'learn more', 'here', 'view more', 'link'];
+                const $targets = $('.ck-editor__editable, .ck-content, .region-content, .node__content, main article, #main-content').filter(':visible');
 
                 let countFail = 0, countLarge = 0, countPass = 0;
 
@@ -570,13 +733,13 @@
                                 hasIssues = true; countFail++;
                                 $el.css({ outline: '4px dashed #e62117', 'outline-offset': '-4px' });
 
-                                const domEl    = this;
-                                const $item    = $('<div></div>').css({ background: '#1e2227', borderRadius: '6px', padding: '10px', marginBottom: '10px', border: '1px solid #e62117' });
-                                const $meta    = $('<div></div>').css({ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' });
-                                const $label   = $('<span>IMAGE: missing alt</span>').css({ color: '#ccc', fontWeight: 'bold', fontFamily: 'monospace', fontSize: '11px' });
-                                const $badge   = $('<span>MISSING ALT</span>').css({ color: '#e62117', fontWeight: 'bold', fontFamily: 'monospace', fontSize: '11px' });
-                                const $aiBtn   = buildAiButton();
-                                const $aiBox   = $('<div></div>').hide();
+                                const domEl = this;
+                                const $item = $('<div></div>').css({ background: '#1e2227', borderRadius: '6px', padding: '10px', marginBottom: '10px', border: '1px solid #e62117' });
+                                const $meta = $('<div></div>').css({ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' });
+                                const $label = $('<span>IMAGE: missing alt</span>').css({ color: '#ccc', fontWeight: 'bold', fontFamily: 'monospace', fontSize: '11px' });
+                                const $badge = $('<span>MISSING ALT</span>').css({ color: '#e62117', fontWeight: 'bold', fontFamily: 'monospace', fontSize: '11px' });
+                                const $aiBtn = buildAiButton();
+                                const $aiBox = $('<div></div>').hide();
 
                                 $aiBtn.on('click', function () {
                                     applySmartFix(domEl, 'missing image alt text - suggest a descriptive alt attribute value', $aiBox);
@@ -598,10 +761,10 @@
                                 hasIssues = true; countFail++;
                                 $el.css({ 'background-color': '#fff4e5', 'outline': '2px dashed #ff9800', 'padding': '2px' });
 
-                                const domEl  = this;
-                                const $item  = $('<div></div>').css({ background: '#1e2227', borderRadius: '6px', padding: '10px', marginBottom: '10px', border: '1px solid #ff9800' });
-                                const $meta  = $('<div></div>').css({ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' });
-                                const $lbl   = $('<span>LINK: vague text</span>').css({ color: '#ccc', fontWeight: 'bold', fontFamily: 'monospace', fontSize: '11px' });
+                                const domEl = this;
+                                const $item = $('<div></div>').css({ background: '#1e2227', borderRadius: '6px', padding: '10px', marginBottom: '10px', border: '1px solid #ff9800' });
+                                const $meta = $('<div></div>').css({ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' });
+                                const $lbl = $('<span>LINK: vague text</span>').css({ color: '#ccc', fontWeight: 'bold', fontFamily: 'monospace', fontSize: '11px' });
                                 const $badge = $('<span>VAGUE</span>').css({ color: '#ff9800', fontWeight: 'bold', fontFamily: 'monospace', fontSize: '11px' });
                                 const $aiBtn = buildAiButton();
                                 const $aiBox = $('<div></div>').hide();
@@ -626,10 +789,10 @@
                                     hasIssues = true; countFail++;
                                     $el.css({ backgroundColor: '#ffebee', borderLeft: '6px solid #d32f2f', padding: '15px', position: 'relative' });
 
-                                    const domEl  = this;
-                                    const $item  = $('<div></div>').css({ background: '#1e2227', borderRadius: '6px', padding: '10px', marginBottom: '10px', border: '1px solid #d32f2f' });
-                                    const $meta  = $('<div></div>').css({ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' });
-                                    const $lbl   = $('<span>PARA: too long</span>').css({ color: '#ccc', fontWeight: 'bold', fontFamily: 'monospace', fontSize: '11px' });
+                                    const domEl = this;
+                                    const $item = $('<div></div>').css({ background: '#1e2227', borderRadius: '6px', padding: '10px', marginBottom: '10px', border: '1px solid #d32f2f' });
+                                    const $meta = $('<div></div>').css({ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' });
+                                    const $lbl = $('<span>PARA: too long</span>').css({ color: '#ccc', fontWeight: 'bold', fontFamily: 'monospace', fontSize: '11px' });
                                     const $badge = $('<span>' + wordCount + ' words</span>').css({ color: '#e62117', fontWeight: 'bold', fontFamily: 'monospace', fontSize: '11px' });
                                     const $aiBtn = buildAiButton('SHORTEN WITH AI');
                                     const $aiBox = $('<div></div>').hide();
@@ -651,34 +814,34 @@
                         const text = $el.text().trim();
                         if (text.length < 2) return;
 
-                        const style     = window.getComputedStyle(this);
-                        const fg        = parseRGB(style.color);
-                        const bgStr     = getActualBackgroundColor(this);
-                        const bg        = parseRGB(bgStr);
-                        const ratio     = getContrastRatio(fg, bg);
-                        const isLarge   = isLargeText(this, style);
+                        const style = window.getComputedStyle(this);
+                        const fg = parseRGB(style.color);
+                        const bgStr = getActualBackgroundColor(this);
+                        const bg = parseRGB(bgStr);
+                        const ratio = getContrastRatio(fg, bg);
+                        const isLarge = isLargeText(this, style);
                         const threshold = isLarge ? 3 : 4.5;
 
                         let statusColor, label;
 
-                        if (ratio >= 7)              { statusColor = '#28a745'; label = 'Pass AAA'; countPass++; }
-                        else if (ratio >= threshold) { statusColor = '#28a745'; label = 'Pass AA';  countPass++; }
+                        if (ratio >= 7) { statusColor = '#28a745'; label = 'Pass AAA'; countPass++; }
+                        else if (ratio >= threshold) { statusColor = '#28a745'; label = 'Pass AA'; countPass++; }
                         else {
                             statusColor = '#e62117';
-                            label       = isLarge ? 'Fail (Large)' : 'Fail AA';
-                            hasIssues   = true;
+                            label = isLarge ? 'Fail (Large)' : 'Fail AA';
+                            hasIssues = true;
                             if (isLarge) countLarge++; else countFail++;
                             $el.css({ 'text-decoration': 'underline wavy #e62117' });
                         }
 
                         const isFail = (statusColor === '#e62117');
-                        const domEl  = this;
-                        const $item  = $('<div></div>').css({ background: '#1e2227', borderRadius: '6px', padding: '10px', marginBottom: '10px', border: `1px solid ${isFail ? '#333' : '#333'}` });
-                        const $meta  = $('<div></div>').css({ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' });
-                        const $name  = $('<span></span>').text(this.tagName + ': ' + text.substring(0, 15) + '...').css({ color: '#ccc', fontWeight: 'bold', fontFamily: 'monospace', fontSize: '11px' });
+                        const domEl = this;
+                        const $item = $('<div></div>').css({ background: '#1e2227', borderRadius: '6px', padding: '10px', marginBottom: '10px', border: `1px solid ${isFail ? '#333' : '#333'}` });
+                        const $meta = $('<div></div>').css({ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' });
+                        const $name = $('<span></span>').text(this.tagName + ': ' + text.substring(0, 15) + '...').css({ color: '#ccc', fontWeight: 'bold', fontFamily: 'monospace', fontSize: '11px' });
                         const $ratio = $('<span></span>').text(ratio + ':1').css({ color: statusColor, fontWeight: 'bold', fontFamily: 'monospace', fontSize: '11px' });
-                        const $bar   = $('<div></div>').css({ height: '6px', background: '#333', borderRadius: '3px', overflow: 'hidden', marginBottom: '8px' });
-                        const $fill  = $('<div></div>').css({ height: '100%', background: statusColor, width: Math.min(ratio * 10, 100) + '%' });
+                        const $bar = $('<div></div>').css({ height: '6px', background: '#333', borderRadius: '3px', overflow: 'hidden', marginBottom: '8px' });
+                        const $fill = $('<div></div>').css({ height: '100%', background: statusColor, width: Math.min(ratio * 10, 100) + '%' });
                         const $badge = $('<span></span>').text(label).css({ display: 'inline-block', border: '1px solid ' + statusColor, padding: '2px 8px', borderRadius: '4px', fontSize: '10px', color: statusColor, fontFamily: 'monospace' });
 
                         $meta.append($name, $ratio);
@@ -718,19 +881,22 @@
                 return $('<button></button>')
                     .text(label || 'AI FIX')
                     .css({
-                        marginTop:     '6px',
-                        background:    'linear-gradient(135deg,#7c3aed,#4f46e5)',
-                        color:         'white',
-                        border:        'none',
-                        padding:       '3px 10px',
-                        borderRadius:  '4px',
-                        fontSize:      '10px',
-                        fontFamily:    'monospace',
-                        fontWeight:    'bold',
-                        cursor:        'pointer',
+                        marginTop: '6px',
+                        background: 'linear-gradient(135deg,#7c3aed,#4f46e5)',
+                        color: 'white',
+                        border: 'none',
+                        padding: '3px 10px',
+                        borderRadius: '4px',
+                        fontSize: '10px',
+                        fontFamily: 'monospace',
+                        fontWeight: 'bold',
+                        cursor: 'pointer',
                         letterSpacing: '0.5px'
                     });
             };
+
+
+
 
         }
     };
