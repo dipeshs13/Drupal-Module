@@ -199,7 +199,7 @@
                 `<div style="margin-top:8px; padding:10px; background:rgba(124,58,237,0.12); border:1px solid rgba(124,58,237,0.4); border-radius:6px; font-size:11px;">` +
                 `<div style="font-size:10px; color:#7c3aed; font-weight:bold; margin-bottom:4px;">GEMINI SUGGESTION</div>` +
                 `<div style="color:#e2d9f3; margin-bottom: 5px;">${cleanText}</div>` +
-                (cleanColor ? `<div style="font-size:10px; color:#10b981;">Recommended Hex: <span style="background:${cleanColor}; padding:0 4px; border-radius:2px; color:#fff;">${cleanColor}</span></div>` : '')  +
+                (cleanColor ? `<div style="font-size:10px; color:#10b981;">Recommended Hex: <span style="background:${cleanColor}; padding:0 4px; border-radius:2px; color:#fff;">${cleanColor}</span></div>` : '') +
                 `<button class="wcag-ai-dismiss" style="margin-top:8px; background:transparent; color:#999; border:1px solid #444; padding:3px 8px; border-radius:4px; cursor:pointer; font-size:9px;">DISMISS</button>` +
                 `</div>`
             );
@@ -274,12 +274,18 @@
                     const contrastOk = ratio >= 4.5;
                     const ratioOk = ratio >= thresh;
 
-                    let message, bgColor;
-                    if (contrastOk && ratioOk) { message = 'Contrast and ratio are fine'; bgColor = '#28a745'; }
-                    else if (ratioOk && !contrastOk) { message = 'Ratio matches but contrast is low'; bgColor = '#ff9800'; }
-                    else if (contrastOk && !ratioOk) { message = 'Contrast matches but ratio is low'; bgColor = '#ff9800'; }
-                    else { message = 'Contrast and ratio do not match'; bgColor = '#e62117'; }
+                    let message = '';
+                    let bgColor = '';
 
+                    const score = (contrastOk ? 1 : 0) + (ratioOk ? 1 : 0);
+
+                    const status = {
+                        2: { message: 'WCAG Pass', bgColor: '#28a745' },
+                        1: { message: 'Partial WCAG pass', bgColor: '#ff9800' },
+                        0: { message: 'WCAG Fail', bgColor: '#e62117' }
+                    };
+
+                    ({ message, bgColor } = status[score]);
                     $tooltip.html(`<span>${message}</span> --- ${ratio}:1 ratio`)
                         .css({
                             background: bgColor, color: '#fff', display: 'block',
@@ -648,7 +654,7 @@
             };
 
             // --- 5. THE CONTENT AUDIT ENGINE ---
-           const runFullAudit = function () {
+            const runFullAudit = function () {
                 const $issueList = $('#wcag-issue-list');
                 const $statusIndicator = $('.wcag-status-indicator');
                 const vagueLinks = ['click here', 'read more', 'learn more', 'here', 'view more', 'link'];
@@ -735,10 +741,10 @@
                                 $el.find('.wcag-word-badge').remove();
                                 if (wordCount >= 80) {
                                     hasIssues = true; countFail++;
-                                    
+
                                     // UPDATED: Apply both Red Ring and Red Background for high visibility
-                                    $el.css({ 
-                                        ...ringStyle, 
+                                    $el.css({
+                                        ...ringStyle,
                                         outline: '2px solid #e62117',
                                         backgroundColor: '#ffebee'
                                     });
@@ -776,8 +782,8 @@
                         const isLarge = isLargeText(this, style);
                         const threshold = isLarge ? 3 : 4.5;
 
-                        let statusColor = '#e62117'; 
-                        let badgesHtml = '';        
+                        let statusColor = '#e62117';
+                        let badgesHtml = '';
 
                         if (ratio >= 7) {
                             statusColor = '#28a745';
@@ -788,7 +794,7 @@
                             statusColor = '#28a745';
                             badgesHtml += `<span style="display:inline-block; border:1px solid #28a745; padding:2px 8px; border-radius:4px; fontSize:10px; color:#28a745; fontFamily:monospace;">Pass AA</span>`;
                             countPass++;
-                            
+
                             // Only apply green outline if not already set to red by paragraph/link check
                             if ($el.css('outline-color') !== 'rgb(230, 33, 23)') {
                                 $el.css({ ...ringStyle, outline: '2px solid #28a745', 'text-decoration': 'none' });
@@ -799,7 +805,7 @@
                             badgesHtml = `<span style="display:inline-block; border:1px solid #e62117; padding:2px 8px; border-radius:4px; fontSize:10px; color:#e62117; fontFamily:monospace;">${failLabel}</span>`;
                             hasIssues = true;
                             if (isLarge) countLarge++; else countFail++;
-                            
+
                             // Apply Red Ring and Underline for contrast fail
                             $el.css({ ...ringStyle, outline: '2px solid #e62117', 'text-decoration': 'underline wavy #e62117' });
                         }
