@@ -104,9 +104,9 @@
  * Brain: Fetches a suggestion but does NOT fill the box yet.
  * Instead, it creates a dropdown UI.
  */
-   /**
-     * Creates a Dropdown UI with multiple AI suggestions based on user input.
-     */
+    /**
+      * Creates a Dropdown UI with multiple AI suggestions based on user input.
+      */
     const showAltDropdown = async function ($altInput, imgUrl) {
         const userHint = $altInput.val().trim();
         if (!imgUrl || userHint.length < 2) return;
@@ -140,16 +140,16 @@
 
             options.forEach(opt => {
                 const $optDiv = $(`<div style="padding:8px; cursor:pointer; border-radius:4px; margin-bottom:2px; border:1px solid transparent;">${opt}</div>`);
-                
+
                 $optDiv.hover(
-                    function() { $(this).css({ 'background': '#2c313a', 'border-color': '#7c3aed' }); },
-                    function() { $(this).css({ 'background': 'transparent', 'border-color': 'transparent' }); }
+                    function () { $(this).css({ 'background': '#2c313a', 'border-color': '#7c3aed' }); },
+                    function () { $(this).css({ 'background': 'transparent', 'border-color': 'transparent' }); }
                 );
 
                 // CRITICAL FIX: Use mousedown and preventDefault to stop the dropdown 
                 // from stealing focus and closing the CKEditor balloon.
-                $optDiv.on('mousedown', function(e) {
-                    e.preventDefault(); 
+                $optDiv.on('mousedown', function (e) {
+                    e.preventDefault();
                     e.stopPropagation();
 
                     // 1. Update the actual input value
@@ -161,7 +161,7 @@
 
                     // 3. Clean up
                     $('.wcag-ai-dropdown').remove();
-                    
+
                     // 4. Refocus the input so the user sees the cursor
                     $altInput.focus();
                 });
@@ -178,91 +178,35 @@
         const $el = $(element);
         const originalText = $el.text().trim();
 
-        // --- 1. PRE-ANALYSIS ---
-        const wordCount = originalText.split(/\s+/).filter(w => w.length > 0).length;
-        const isTooLong = wordCount > 80;
-        const isContrastIssue = issueType.toLowerCase().includes('contrast') || issueType.toLowerCase().includes('color');
-
-        // --- 2. DYNAMIC INSTRUCTION BUILDING ---
-        let instructions = "";
-        if (isTooLong && isContrastIssue) {
-            instructions = "This paragraph is too long (over 80 words) AND has poor contrast. Shorten the text to be concise AND suggest a high-contrast hex color code (e.g., #000000 or #FFFFFF) that works for a screen reader.";
-        } else if (isTooLong) {
-            instructions = "This paragraph is too long. Please rewrite it to be under 50 words while keeping the core meaning.";
-        } else if (isContrastIssue) {
-            instructions = "The text color contrast is insufficient. Provide the same text but suggest a WCAG-compliant accessible hex color code.";
-        } else {
-            instructions = `Fix this issue: "${issueType}".`;
-        }
-
-        // --- 3. SHOW LOADING ---
         $resultBox.html(
             '<div style="color:#a78bfa; font-style:italic; font-size:11px; margin-top:6px; display:flex; align-items:center; gap:6px;">' +
             '<span class="wcag-ai-spinner" style="display:inline-block; width:10px; height:10px; border:2px solid #a78bfa; border-top-color:transparent; border-radius:50%; animation:wcagSpin 0.8s linear infinite;"></span>' +
-            'Gemini is analyzing content & styles...</div>'
+            'Gemini is analyzing...</div>'
         ).show();
 
-        // Use a structured prompt so we can parse the response easily
-        const prompt = `
-        You are a WCAG 2.1 accessibility expert.
-        Original Text: "${originalText}"
-        Issue: ${instructions}
-        
-        Return the result EXACTLY in this format:
-        FIXED_TEXT: [your text here]
-        FIXED_COLOR: [hex code or NONE]
-    `;
+        const prompt = `You are a WCAG 2.1 expert. Original Text: "${originalText}". Issue: ${issueType}. Return FIXED_TEXT and FIXED_COLOR.`;
 
         try {
             const suggestion = await callGemini(prompt);
-
-            // --- 4. PARSE MULTI-PART RESPONSE ---
             const textMatch = suggestion.match(/FIXED_TEXT:\s*([\s\S]*?)(?=FIXED_COLOR:|$)/i);
             const colorMatch = suggestion.match(/FIXED_COLOR:\s*(#\w+|NONE)/i);
 
             const cleanText = textMatch ? textMatch[1].trim() : originalText;
             const cleanColor = (colorMatch && colorMatch[1].toUpperCase() !== 'NONE') ? colorMatch[1].trim() : null;
 
+            // UPDATED: UI only shows suggestions; "Apply" button is removed
             $resultBox.html(
-                `<div style="margin-top:8px; padding:8px 10px; background:rgba(124,58,237,0.12); border:1px solid rgba(124,58,237,0.4); border-radius:6px; font-size:11px; color:#c4b5fd; line-height:1.5;">` +
-                `<div style="font-size:10px; color:#7c3aed; font-weight:bold; margin-bottom:4px; letter-spacing:0.5px;">GEMINI SMART FIX</div>` +
+                `<div style="margin-top:8px; padding:10px; background:rgba(124,58,237,0.12); border:1px solid rgba(124,58,237,0.4); border-radius:6px; font-size:11px;">` +
+                `<div style="font-size:10px; color:#7c3aed; font-weight:bold; margin-bottom:4px;">GEMINI SUGGESTION</div>` +
                 `<div style="color:#e2d9f3; margin-bottom: 5px;">${cleanText}</div>` +
-                (cleanColor ? `<div style="font-size:10px; color:#10b981;">Suggested Color: <span style="background:${cleanColor}; padding:0 4px; border-radius:2px;">${cleanColor}</span></div>` : '') +
-                `<button class="wcag-ai-apply-text" style="margin-top:8px; background:#7c3aed; color:white; border:none; padding:3px 10px; border-radius:4px; font-size:10px; cursor:pointer; font-weight:bold;">APPLY FIXES</button>` +
-                `<button class="wcag-ai-dismiss" style="margin-top:8px; margin-left:6px; background:transparent; color:#666; border:1px solid #444; padding:3px 10px; border-radius:4px; font-size:10px; cursor:pointer;">DISMISS</button>` +
+                (cleanColor ? `<div style="font-size:10px; color:#10b981;">Recommended Hex: <span style="background:${cleanColor}; padding:0 4px; border-radius:2px; color:#fff;">${cleanColor}</span></div>` : '')  +
+                `<button class="wcag-ai-dismiss" style="margin-top:8px; background:transparent; color:#999; border:1px solid #444; padding:3px 8px; border-radius:4px; cursor:pointer; font-size:9px;">DISMISS</button>` +
                 `</div>`
             );
 
-            // --- 5. WIRE APPLY BUTTON ---
-            $resultBox.find('.wcag-ai-apply-text').on('click', function () {
-                // Apply text
-                $el.text(cleanText);
-
-                // Apply color if suggested
-                if (cleanColor) {
-                    $el.css('color', cleanColor);
-                    // Also update inline style to ensure persistence
-                    const currentStyle = $el.attr('style') || '';
-                    $el.attr('style', currentStyle + ` color: ${cleanColor} !important;`);
-                }
-
-                $el.css({ border: '2px solid #28a745', transition: 'border 0.3s' });
-                setTimeout(() => $el.css('border', ''), 2500);
-
-                $resultBox.html(
-                    '<div style="color:#28a745; font-size:11px; margin-top:6px; font-weight:bold;">✅ Changes applied!</div>'
-                );
-            });
-
-            $resultBox.find('.wcag-ai-dismiss').on('click', function () {
-                $resultBox.slideUp(200);
-            });
-
+            $resultBox.find('.wcag-ai-dismiss').on('click', () => $resultBox.slideUp(200));
         } catch (err) {
-            $resultBox.html(
-                `<div style="margin-top:6px; color:#f87171; font-size:11px; padding:6px 8px; background:rgba(239,68,68,0.1); border-radius:4px; border:1px solid rgba(239,68,68,0.3);">` +
-                `AI unavailable: ${err.message}</div>`
-            );
+            $resultBox.html(`<div style="color:#f87171; font-size:11px;">AI Suggestion Error.</div>`);
         }
     };
 
@@ -552,7 +496,7 @@
                                 </div>
                                 <div style="display:flex; align-items:center; gap:10px;">
                                     <div style="width:18px; height:12px; background:#7c3aed; border-radius:2px;"></div>
-                                    <span>Purple button = AI fix available</span>
+                                    <span>Purple button = AI Suggestion available</span>
                                 </div>
                             </div>
                         </div>
@@ -573,13 +517,13 @@
                         mutation.addedNodes.forEach((node) => {
                             if (node.nodeType === 1) {
                                 const $altInput = $(node).find('.ck-input-text, .ck-labeled-field-view__input-wrapper input');
-                                
+
                                 if ($altInput.length > 0) {
                                     const $activeImg = $('.ck-editor__editable img.ck-widget_selected, .ck-editor__editable .ck-widget_selected img');
                                     const imgUrl = $activeImg.attr('src');
 
                                     let typingTimer;
-                                    $altInput.on('input', function() {
+                                    $altInput.on('input', function () {
                                         clearTimeout(typingTimer);
                                         typingTimer = setTimeout(() => {
                                             showAltDropdown($(this), imgUrl);
@@ -594,7 +538,7 @@
                 bodyObserver.observe(document.body, { childList: true, subtree: true });
 
                 // Close dropdown if clicked outside
-               $(document).on('mousedown.wcagGlobal', function(e) {
+                $(document).on('mousedown.wcagGlobal', function (e) {
                     if (!$(e.target).closest('.wcag-ai-dropdown, .ck-balloon-panel').length) {
                         $('.wcag-ai-dropdown').remove();
                     }
@@ -704,7 +648,7 @@
             };
 
             // --- 5. THE CONTENT AUDIT ENGINE ---
-            const runFullAudit = function () {
+           const runFullAudit = function () {
                 const $issueList = $('#wcag-issue-list');
                 const $statusIndicator = $('.wcag-status-indicator');
                 const vagueLinks = ['click here', 'read more', 'learn more', 'here', 'view more', 'link'];
@@ -717,7 +661,6 @@
                     return;
                 }
 
-                // We build the audit HTML as DOM nodes so we can attach jQuery events to AI buttons
                 const $auditContainer = $('<div class="wcag-audit-container"></div>');
                 let hasIssues = false;
 
@@ -726,12 +669,15 @@
                         const $el = $(this);
                         if ($el.closest('#toolbar-administration, .toolbar, #wcag-accessibility-sidebar').length) return;
 
+                        // Shared ring style constants
+                        const ringStyle = { 'outline-offset': '2px', 'border-radius': '2px' };
+
                         // ---- A. IMAGE CHECK ----
                         if (this.tagName === 'IMG') {
                             const alt = $el.attr('alt');
                             if (!alt || alt.trim() === '') {
                                 hasIssues = true; countFail++;
-                                $el.css({ outline: '4px dashed #e62117', 'outline-offset': '-4px' });
+                                $el.css({ ...ringStyle, outline: '2px solid #e62117' });
 
                                 const domEl = this;
                                 const $item = $('<div></div>').css({ background: '#1e2227', borderRadius: '6px', padding: '10px', marginBottom: '10px', border: '1px solid #e62117' });
@@ -749,7 +695,7 @@
                                 $item.append($meta, $aiBtn, $aiBox);
                                 $auditContainer.append($item);
                             } else {
-                                $el.css({ outline: '', 'outline-offset': '' });
+                                $el.css({ ...ringStyle, outline: '2px solid #28a745' });
                             }
                             return;
                         }
@@ -759,7 +705,7 @@
                             const linkText = $el.text().toLowerCase().trim();
                             if (vagueLinks.includes(linkText)) {
                                 hasIssues = true; countFail++;
-                                $el.css({ 'background-color': '#fff4e5', 'outline': '2px dashed #ff9800', 'padding': '2px' });
+                                $el.css({ ...ringStyle, outline: '2px solid #e62117' });
 
                                 const domEl = this;
                                 const $item = $('<div></div>').css({ background: '#1e2227', borderRadius: '6px', padding: '10px', marginBottom: '10px', border: '1px solid #ff9800' });
@@ -776,6 +722,8 @@
                                 $meta.append($lbl, $badge);
                                 $item.append($meta, $aiBtn, $aiBox);
                                 $auditContainer.append($item);
+                            } else {
+                                $el.css({ ...ringStyle, outline: '2px solid #28a745' });
                             }
                         }
 
@@ -787,7 +735,13 @@
                                 $el.find('.wcag-word-badge').remove();
                                 if (wordCount >= 80) {
                                     hasIssues = true; countFail++;
-                                    $el.css({ backgroundColor: '#ffebee', borderLeft: '6px solid #d32f2f', padding: '15px', position: 'relative' });
+                                    
+                                    // UPDATED: Apply both Red Ring and Red Background for high visibility
+                                    $el.css({ 
+                                        ...ringStyle, 
+                                        outline: '2px solid #e62117',
+                                        backgroundColor: '#ffebee'
+                                    });
 
                                     const domEl = this;
                                     const $item = $('<div></div>').css({ background: '#1e2227', borderRadius: '6px', padding: '10px', marginBottom: '10px', border: '1px solid #d32f2f' });
@@ -805,7 +759,7 @@
                                     $item.append($meta, $aiBtn, $aiBox);
                                     $auditContainer.append($item);
                                 } else {
-                                    $el.css({ backgroundColor: '', borderLeft: '', padding: '', position: '' });
+                                    $el.css({ ...ringStyle, outline: '2px solid #28a745', backgroundColor: '' });
                                 }
                             }
                         }
@@ -822,33 +776,49 @@
                         const isLarge = isLargeText(this, style);
                         const threshold = isLarge ? 3 : 4.5;
 
-                        let statusColor, label;
+                        let statusColor = '#e62117'; 
+                        let badgesHtml = '';        
 
-                        if (ratio >= 7) { statusColor = '#28a745'; label = 'Pass AAA'; countPass++; }
-                        else if (ratio >= threshold) { statusColor = '#28a745'; label = 'Pass AA'; countPass++; }
-                        else {
+                        if (ratio >= 7) {
+                            statusColor = '#28a745';
+                            badgesHtml += `<span style="display:inline-block; border:1px solid #28a745; padding:2px 8px; border-radius:4px; fontSize:10px; color:#28a745; fontFamily:monospace; margin-right:4px;">Pass AAA</span>`;
+                        }
+
+                        if (ratio >= threshold) {
+                            statusColor = '#28a745';
+                            badgesHtml += `<span style="display:inline-block; border:1px solid #28a745; padding:2px 8px; border-radius:4px; fontSize:10px; color:#28a745; fontFamily:monospace;">Pass AA</span>`;
+                            countPass++;
+                            
+                            // Only apply green outline if not already set to red by paragraph/link check
+                            if ($el.css('outline-color') !== 'rgb(230, 33, 23)') {
+                                $el.css({ ...ringStyle, outline: '2px solid #28a745', 'text-decoration': 'none' });
+                            }
+                        } else {
                             statusColor = '#e62117';
-                            label = isLarge ? 'Fail (Large)' : 'Fail AA';
+                            const failLabel = isLarge ? 'Fail (Large)' : 'Fail AA';
+                            badgesHtml = `<span style="display:inline-block; border:1px solid #e62117; padding:2px 8px; border-radius:4px; fontSize:10px; color:#e62117; fontFamily:monospace;">${failLabel}</span>`;
                             hasIssues = true;
                             if (isLarge) countLarge++; else countFail++;
-                            $el.css({ 'text-decoration': 'underline wavy #e62117' });
+                            
+                            // Apply Red Ring and Underline for contrast fail
+                            $el.css({ ...ringStyle, outline: '2px solid #e62117', 'text-decoration': 'underline wavy #e62117' });
                         }
 
                         const isFail = (statusColor === '#e62117');
                         const domEl = this;
-                        const $item = $('<div></div>').css({ background: '#1e2227', borderRadius: '6px', padding: '10px', marginBottom: '10px', border: `1px solid ${isFail ? '#333' : '#333'}` });
+                        const $item = $('<div></div>').css({ background: '#1e2227', borderRadius: '6px', padding: '10px', marginBottom: '10px', border: `1px solid #333` });
                         const $meta = $('<div></div>').css({ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' });
                         const $name = $('<span></span>').text(this.tagName + ': ' + text.substring(0, 15) + '...').css({ color: '#ccc', fontWeight: 'bold', fontFamily: 'monospace', fontSize: '11px' });
                         const $ratio = $('<span></span>').text(ratio + ':1').css({ color: statusColor, fontWeight: 'bold', fontFamily: 'monospace', fontSize: '11px' });
                         const $bar = $('<div></div>').css({ height: '6px', background: '#333', borderRadius: '3px', overflow: 'hidden', marginBottom: '8px' });
                         const $fill = $('<div></div>').css({ height: '100%', background: statusColor, width: Math.min(ratio * 10, 100) + '%' });
-                        const $badge = $('<span></span>').text(label).css({ display: 'inline-block', border: '1px solid ' + statusColor, padding: '2px 8px', borderRadius: '4px', fontSize: '10px', color: statusColor, fontFamily: 'monospace' });
+
+                        const $badgeContainer = $('<div></div>').html(badgesHtml);
 
                         $meta.append($name, $ratio);
                         $bar.append($fill);
-                        $item.append($meta, $bar, $badge);
+                        $item.append($meta, $bar, $badgeContainer);
 
-                        // Only attach AI fix button to FAILING contrast elements
                         if (isFail) {
                             const $aiBtn = buildAiButton();
                             const $aiBox = $('<div></div>').hide();
@@ -879,7 +849,7 @@
              */
             const buildAiButton = function (label) {
                 return $('<button></button>')
-                    .text(label || 'AI FIX')
+                    .text(label || 'AI SUGGESTION')
                     .css({
                         marginTop: '6px',
                         background: 'linear-gradient(135deg,#7c3aed,#4f46e5)',

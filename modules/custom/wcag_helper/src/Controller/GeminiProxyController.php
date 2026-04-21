@@ -54,6 +54,7 @@ class GeminiProxyController extends ControllerBase {
 
         // --- 4. GET API KEY ---
         $apiKey = Settings::get('gemini_api_key');
+        // $apiKey = getenv('GEMINI_API_KEY');
         if (empty($apiKey)) {
             \Drupal::logger('wcag_helper')->critical(
                 'Gemini API key not configured.'
