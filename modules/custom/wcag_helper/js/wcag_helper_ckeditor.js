@@ -317,7 +317,24 @@
                         });
                 });
                 $(document).on('mouseleave', function () { $('#wcag-hover-tooltip').hide(); });
-
+                // --- 1a. ACCESSIBILITY SCORE GAUGE ---
+                if (!$('#wcag-score-container').length) {
+                    const $scorePanel = $(`
+        <div id="wcag-score-container" style="text-align:center; margin-bottom:20px; padding:15px; background:#1e2227; border-radius:10px; border:1px solid #333;">
+            <div style="font-size:10px; color:#888; letter-spacing:1px; margin-bottom:10px; font-family:monospace;">PAGE ACCESSIBILITY HEALTH</div>
+            <div style="position:relative; display:inline-block;">
+                <svg width="100" height="100" viewBox="0 0 100 100">
+                    <circle cx="50" cy="50" r="45" fill="none" stroke="#333" stroke-width="8" />
+                    <circle id="wcag-score-circle" cx="50" cy="50" r="45" fill="none" stroke="#7c3aed" stroke-width="8" 
+                        stroke-dasharray="282.7" stroke-dashoffset="282.7" stroke-linecap="round" style="transition: stroke-dashoffset 1s ease-out; transform: rotate(-90deg); transform-origin: 50% 50%;" />
+                </svg>
+                <div id="wcag-score-text" style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:22px; font-weight:bold; color:#fff; font-family:monospace;">0%</div>
+            </div>
+            <div id="wcag-publish-status" style="margin-top:12px; font-size:11px; font-weight:bold; font-family:monospace; letter-spacing:0.5px; text-transform:uppercase;">Scanning...</div>
+        </div>
+    `);
+                    $content.prepend($scorePanel); // Put it at the very top of the sidebar
+                }
                 // --- 1a. SUMMARY STATS ---
                 if (!$('#wcag-summary-stats').length) {
                     const $statsBar = $(`
@@ -890,6 +907,29 @@
 
                 $issueList.empty().append($auditContainer);
                 $statusIndicator.toggleClass('wcag-status-active', hasIssues);
+
+                // Update the visual score gauge
+                const score = calculateAccessibilityScore(countPass, countFail, countLarge);
+                const $circle = $('#wcag-score-circle');
+                const $text = $('#wcag-score-text');
+                const $status = $('#wcag-publish-status');
+
+                // Animate circle (Circumference of r45 is ~282.7)
+                const offset = 282.7 - (282.7 * score / 100);
+                $circle.css('stroke-dashoffset', offset);
+                $text.text(score + '%');
+
+                // Visual feedback based on score
+                if (score >= 90) {
+                    $circle.css('stroke', '#28a745');
+                    $status.text('✅ Ready to Publish').css('color', '#28a745');
+                } else if (score >= 70) {
+                    $circle.css('stroke', '#ff9800');
+                    $status.text('⚠️ Improvements Needed').css('color', '#ff9800');
+                } else {
+                    $circle.css('stroke', '#e62117');
+                    $status.text('❌ High Risk - Do Not Publish').css('color', '#e62117');
+                }
             };
 
             /**
@@ -949,5 +989,15 @@
             g: parseInt(vals[1]),
             b: parseInt(vals[2])
         };
+    };
+    /**
+ * Calculates a percentage score (0-100) weighted by issue severity.
+ */
+    const calculateAccessibilityScore = function (pass, fail, partial) {
+        const total = pass + fail + partial;
+        if (total === 0) return 100;
+        // Fails (Red) reduce score significantly, Partials (Orange) reduce it moderately
+        const score = ((pass + (partial * 0.5)) / total) * 100;
+        return Math.round(score);
     };
 })(jQuery, Drupal, once);
