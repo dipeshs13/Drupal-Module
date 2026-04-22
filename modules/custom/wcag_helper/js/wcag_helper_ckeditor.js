@@ -174,42 +174,66 @@
             setTimeout(() => $dropdown.remove(), 2000);
         }
     };
+    /**
+  * Triggers the Gemini AI to analyze a specific element and provide 
+  * a non-automated suggestion for the editor to review.
+  */
     const applySmartFix = async function (element, issueType, $resultBox) {
         const $el = $(element);
         const originalText = $el.text().trim();
 
+        // Use your new helper to find the environmental context
+        const bgColor = getActualBackgroundColor(element);
+
         $resultBox.html(
             '<div style="color:#a78bfa; font-style:italic; font-size:11px; margin-top:6px; display:flex; align-items:center; gap:6px;">' +
             '<span class="wcag-ai-spinner" style="display:inline-block; width:10px; height:10px; border:2px solid #a78bfa; border-top-color:transparent; border-radius:50%; animation:wcagSpin 0.8s linear infinite;"></span>' +
-            'Gemini is analyzing...</div>'
+            'Gemini is analyzing context...</div>'
         ).show();
 
-        const prompt = `You are a WCAG 2.1 expert. Original Text: "${originalText}". Issue: ${issueType}. Return FIXED_TEXT and FIXED_COLOR.`;
+        // The prompt now includes the background color so Gemini can calculate contrast
+        const prompt = `You are a WCAG 2.1 expert. 
+        Context: The text "${originalText}" fails ${issueType} accessibility. 
+        Background color detected: ${bgColor}.
+        Task: Suggest an accessible high-contrast HEX color that works on this background.
+        Return your response in this exact format:
+        FIXED_TEXT: [Keep or slightly improve text]
+        FIXED_COLOR: [#HEXCODE]`;
 
         try {
             const suggestion = await callGemini(prompt);
+
+            // Parsing the structured response
             const textMatch = suggestion.match(/FIXED_TEXT:\s*([\s\S]*?)(?=FIXED_COLOR:|$)/i);
-            const colorMatch = suggestion.match(/FIXED_COLOR:\s*(#\w+|NONE)/i);
+            const colorMatch = suggestion.match(/FIXED_COLOR:\s*(#\w+)/i);
 
             const cleanText = textMatch ? textMatch[1].trim() : originalText;
-            const cleanColor = (colorMatch && colorMatch[1].toUpperCase() !== 'NONE') ? colorMatch[1].trim() : null;
+            const cleanColor = colorMatch ? colorMatch[1].trim() : null;
 
-            // UPDATED: UI only shows suggestions; "Apply" button is removed
             $resultBox.html(
                 `<div style="margin-top:8px; padding:10px; background:rgba(124,58,237,0.12); border:1px solid rgba(124,58,237,0.4); border-radius:6px; font-size:11px;">` +
-                `<div style="font-size:10px; color:#7c3aed; font-weight:bold; margin-bottom:4px;">GEMINI SUGGESTION</div>` +
-                `<div style="color:#e2d9f3; margin-bottom: 5px;">${cleanText}</div>` +
-                (cleanColor ? `<div style="font-size:10px; color:#10b981;">Recommended Hex: <span style="background:${cleanColor}; padding:0 4px; border-radius:2px; color:#fff;">${cleanColor}</span></div>` : '') +
-                `<button class="wcag-ai-dismiss" style="margin-top:8px; background:transparent; color:#999; border:1px solid #444; padding:3px 8px; border-radius:4px; cursor:pointer; font-size:9px;">DISMISS</button>` +
+                `<div style="font-size:10px; color:#7c3aed; font-weight:bold; margin-bottom:4px; letter-spacing:0.5px;">✨ GEMINI AI SUGGESTION</div>` +
+                `<div style="color:#e2d9f3; margin-bottom: 8px; line-height:1.4;">${cleanText}</div>` +
+                (cleanColor ?
+                    `<div style="font-size:10px; color:#10b981; display:flex; align-items:center; gap:5px;">` +
+                    `Recommended Hex: <span style="background:${cleanColor}; padding:2px 6px; border-radius:3px; color:${(parseRGB(cleanColor).r * 0.299 + parseRGB(cleanColor).g * 0.587 + parseRGB(cleanColor).b * 0.114) > 186 ? '#000' : '#fff'}; border:1px solid rgba(255,255,255,0.2); font-weight:bold;">${cleanColor}</span>` +
+                    `</div>` : ''
+                ) +
+                `<div style="display:flex; justify-content:flex-end;">` +
+                `<button class="wcag-ai-dismiss" style="margin-top:10px; background:transparent; color:#666; border:1px solid #444; padding:4px 10px; border-radius:4px; cursor:pointer; font-size:9px; font-family:monospace;">DISMISS</button>` +
+                `</div>` +
                 `</div>`
             );
 
-            $resultBox.find('.wcag-ai-dismiss').on('click', () => $resultBox.slideUp(200));
+            $resultBox.find('.wcag-ai-dismiss').on('click', function () {
+                $resultBox.slideUp(200);
+            });
+
         } catch (err) {
-            $resultBox.html(`<div style="color:#f87171; font-size:11px;">AI Suggestion Error.</div>`);
+            console.error('[WCAG AI] Suggestion Error:', err);
+            $resultBox.html(`<div style="color:#f87171; font-size:11px; padding:5px;">AI analysis failed. Please check connection.</div>`);
         }
     };
-
     /**
      * Pings Gemini with a simple prompt and updates the status badge.
      * Gives the editor visual proof the connection works.
@@ -549,6 +573,25 @@
                         $('.wcag-ai-dropdown').remove();
                     }
                 });
+                // --- NEW: ALTERNATIVE TEXT LISTENER ---
+                $(document).on('focus', 'input[name*="[alt]"], .ck-input-text', function () {
+                    const $altInput = $(this);
+                    if ($altInput.data('ai-attached')) return;
+                    $altInput.data('ai-attached', true);
+
+                    const $activeImg = $('.ck-editor__editable img.ck-widget_selected, .ck-editor__editable .ck-widget_selected img');
+                    const imgUrl = $activeImg.attr('src');
+
+                    let typingTimer;
+                    $altInput.on('input', function () {
+                        clearTimeout(typingTimer);
+                        if ($(this).val().trim().length >= 2) {
+                            typingTimer = setTimeout(() => {
+                                showAltDropdown($(this), imgUrl || "image-context");
+                            }, 800);
+                        }
+                    });
+                });
             });
             // --- 2. INITIAL SCAN FOR EXISTING IMAGES ---
             // This handles images already on the page when it loads
@@ -570,7 +613,6 @@
             });
 
             // --- 3. MATH & BACKGROUND HELPERS ---
-
             const getActualBackgroundColor = (el) => {
                 const style = window.getComputedStyle(el);
                 const bg = style.backgroundColor;
@@ -876,5 +918,36 @@
 
         }
     };
+    // ============================================================
+    // MISSING HELPERS - ADD THESE TO FIX THE REFERENCE ERROR
+    // ============================================================
 
+    /**
+     * Finds the real background color by traversing up the DOM 
+     * if the current element is transparent.
+     */
+    const getActualBackgroundColor = function (el) {
+        let bg = window.getComputedStyle(el).backgroundColor;
+        // Check if background is transparent or has 0 alpha
+        if (bg === 'rgba(0, 0, 0, 0)' || bg === 'transparent' || bg.match(/rgba\(.*,\s*0\)$/)) {
+            if (el.parentElement && el.parentElement !== document.body) {
+                return getActualBackgroundColor(el.parentElement);
+            }
+            return 'rgb(255, 255, 255)'; // Fallback to white
+        }
+        return bg;
+    };
+
+    /**
+     * Standardizes RGB/RGBA strings into an object for contrast math.
+     */
+    const parseRGB = (colorStr) => {
+        const vals = colorStr.match(/\d+/g);
+        if (!vals) return { r: 255, g: 255, b: 255 };
+        return {
+            r: parseInt(vals[0]),
+            g: parseInt(vals[1]),
+            b: parseInt(vals[2])
+        };
+    };
 })(jQuery, Drupal, once);
